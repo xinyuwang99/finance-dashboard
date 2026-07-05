@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人財務儀表板 - 示範資料</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0b0f14; --card: #111821; --card-2: #182230; --border: #1f2a3a;
+    --text: #e6edf3; --muted: #8a98ac;
+    --green: #00e676; --green-dim: #00c853; --red: #ff5252;
+    --yellow: #ffc400; --blue: #40c4ff; --purple: #b388ff;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif; min-height: 100vh; }
+  body { padding: 16px; padding-bottom: 90px; }
+  .header { position: sticky; top: 0; z-index: 50; background: linear-gradient(180deg, rgba(11,15,20,0.95), rgba(11,15,20,0.85)); backdrop-filter: blur(10px); padding: 14px 0; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; background: linear-gradient(90deg, var(--green), #76ff03); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .month-picker { background: var(--card-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 14px; outline: none; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; position: relative; overflow: hidden; }
+  .kpi-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--green); }
+  .kpi-card.liability::before { background: var(--red); }
+  .kpi-card.net::before { background: var(--blue); }
+  .kpi-card.lending::before { background: var(--yellow); }
+  .kpi-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .kpi-value { font-size: 22px; font-weight: 700; }
+  .kpi-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .kpi-sub.pos { color: var(--green); } .kpi-sub.neg { color: var(--red); }
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 15px; font-weight: 600; }
+  .section-title .badge { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(0,230,118,0.15); color: var(--green); text-transform: uppercase; letter-spacing: 0.5px; }
+  .row-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+  .row-table th { text-align: left; font-size: 11px; color: var(--muted); padding: 4px 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .row-table td { background: var(--card-2); border: 1px solid var(--border); padding: 8px 6px; font-size: 13px; }
+  .row-table td:first-child { border-radius: 8px 0 0 8px; border-right: none; }
+  .row-table td:nth-child(n+2):not(:last-child) { border-left: none; border-right: none; }
+  .row-table td:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .inp { width: 100%; background: transparent; border: none; outline: none; color: var(--text); font-size: 13px; padding: 4px 2px; }
+  .inp.num { text-align: right; font-variant-numeric: tabular-nums; }
+  select.inp { appearance: none; cursor: pointer; }
+  .row-actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+  .btn-icon { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--muted); cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .btn-icon:hover { color: var(--red); border-color: var(--red); }
+  .btn { background: var(--green-dim); color: #00210b; border: none; padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .btn-secondary { background: var(--card-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chart-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 720px) { .chart-grid { grid-template-columns: 1fr 1fr; } }
+  .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-height: 240px; }
+  .chart-box h3 { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .chart-canvas-wrap { position: relative; height: 220px; }
+  .subtotal { margin-top: 8px; padding: 10px; background: var(--card-2); border-radius: 8px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .subtotal b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(17,24,33,0.96); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 12px 16px; display: flex; gap: 10px; justify-content: flex-end; z-index: 100; }
+  .save-bar .saved-tag { margin-right: auto; align-self: center; font-size: 12px; color: var(--green); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
+  .tab { flex-shrink: 0; padding: 8px 14px; background: var(--card-2); border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .tab.active { background: rgba(0,230,118,0.15); color: var(--green); border-color: var(--green); }
+  .subsection-title { font-size: 13px; color: var(--muted); margin: 14px 0 6px; font-weight: 500; }
+  .hint { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(64,196,255,0.15); color: var(--blue); }
+  .tag.green { background: rgba(0,230,118,0.15); color: var(--green); }
+  .tag.red { background: rgba(255,82,82,0.15); color: var(--red); }
+  .tag.yellow { background: rgba(255,196,0,0.15); color: var(--yellow); }
+  .help-text { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  #stockBroker, #cryptoTarget { background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); width: 100%; outline: none; margin-bottom: 8px; font-size: 13px; }
+  .profit-pos { color: var(--green); font-weight: 600; }
+  .profit-neg { color: var(--red); font-weight: 600; }
+  #resetBtn { background: var(--card-2); color: var(--red); border: 1px solid var(--border); padding: 8px 14px; border-radius: 10px; font-size: 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-row">
+    <h1>💰 個人財務儀表板</h1>
+    <div style="display:flex; gap:8px;">
+      <select id="monthPicker" class="month-picker"></select>
+      <button class="btn btn-secondary" onclick="addMonth()">＋ 新月份</button>
+    </div>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">總資產 (TWD)</div>
+    <div class="kpi-value" id="kpiAssets">NT$ 0</div>
+    <div class="kpi-sub" id="kpiAssetsSub">—</div>
+  </div>
+  <div class="kpi-card liability">
+    <div class="kpi-label">總負債 (TWD)</div>
+    <div class="kpi-value" id="kpiLiab">NT$ 0</div>
+    <div class="kpi-sub" id="kpiLiabSub">—</div>
+  </div>
+  <div class="kpi-card net">
+    <div class="kpi-label">淨值 (TWD)</div>
+    <div class="kpi-value" id="kpiNet">NT$ 0</div>
+    <div class="kpi-sub" id="kpiNetSub">—</div>
+  </div>
+  <div class="kpi-card lending">
+    <div class="kpi-label">借出款 (TWD)</div>
+    <div class="kpi-value" id="kpiLend">NT$ 0</div>
+    <div class="kpi-sub">別人欠我</div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="chart-grid">
+  <div class="chart-box">
+    <h3>資產配置</h3>
+    <div class="chart-canvas-wrap"><canvas id="donutChart"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <h3>各銀行帳戶餘額 (TWD)</h3>
+    <div class="chart-canvas-wrap"><canvas id="bankChart"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <h3>各類別月收支</h3>
+    <div class="chart-canvas-wrap"><canvas id="incomeChart"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <h3>歷史淨值趨勢</h3>
+    <div class="chart-canvas-wrap"><canvas id="trendChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Bank Accounts -->
+<div class="section">
+  <div class="section-title">
+    <span>🏦 銀行帳戶 <span class="badge">最多 7 個</span></span>
+    <button class="btn" onclick="addBank()">＋ 新增</button>
+  </div>
+  <div class="hint">支援外幣：會根據設定的匯率自動折算台幣。</div>
+  <table class="row-table" id="bankTable">
+    <thead><tr>
+      <th style="width:50px;">#</th>
+      <th>暱稱</th><th>機構</th>
+      <th style="width:80px;">幣別</th>
+      <th style="width:110px;">餘額</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="subtotal"><span>折算台幣小計</span><b id="bankSubtotal">NT$ 0</b></div>
+</div>
+
+<!-- Credit Cards -->
+<div class="section">
+  <div class="section-title">
+    <span>💳 信用卡（無帳戶） <span class="badge">最多 5 個</span></span>
+    <button class="btn" onclick="addCard()">＋ 新增</button>
+  </div>
+  <div class="hint">每月應繳金額會計入當月負債。</div>
+  <table class="row-table" id="cardTable">
+    <thead><tr>
+      <th style="width:50px;">#</th>
+      <th>發卡銀行</th><th>卡片名稱</th>
+      <th style="width:90px;">類型</th>
+      <th style="width:110px;">月付金</th>
+      <th style="width:110px;">未付餘額</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="subtotal"><span>月付 + 未付總計 (TWD)</span><b id="cardSubtotal">NT$ 0</b></div>
+</div>
+
+<!-- Crypto -->
+<div class="section">
+  <div class="section-title">
+    <span>🪙 虛擬貨幣 <span class="badge">2 個交易所</span></span>
+    <span style="font-size:11px; color:var(--muted);">切換交易所 / 新增幣種</span>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-exchange="A" onclick="switchExchange('A', this)">交易所 A</div>
+    <div class="tab" data-exchange="B" onclick="switchExchange('B', this)">交易所 B</div>
+  </div>
+  <table class="row-table" id="cryptoTable">
+    <thead><tr>
+      <th>交易所</th>
+      <th>幣種</th>
+      <th style="width:160px;">持有數量</th>
+      <th style="width:120px;">現價 (USD)</th>
+      <th style="width:140px;">市值 (TWD)</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="btn-row">
+    <button class="btn" onclick="addCrypto()">＋ 新增幣種</button>
+  </div>
+  <div class="subtotal"><span>加密貨幣小計 (TWD)</span><b id="cryptoSubtotal">NT$ 0</b></div>
+</div>
+
+<!-- Stocks -->
+<div class="section">
+  <div class="section-title">
+    <span>📈 股票投資 <span class="badge">3 個券商</span></span>
+  </div>
+  <div class="tabs">
+    <div class="tab" data-market="TW" onclick="switchMarket('TW', this)">台股</div>
+    <div class="tab active" data-market="US" onclick="switchMarket('US', this)">美股</div>
+  </div>
+  <input type="text" id="stockBroker" placeholder="券商暱稱（例如：富邦、永豐、IB）">
+  <table class="row-table" id="stockTable">
+    <thead><tr>
+      <th style="width:80px;">代號</th>
+      <th>名稱</th>
+      <th style="width:80px;">張/股</th>
+      <th style="width:90px;">現價</th>
+      <th style="width:90px;">均價</th>
+      <th style="width:120px;">市值 TWD</th>
+      <th style="width:120px;">未實現損益</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="btn-row">
+    <button class="btn" onclick="addStock()">＋ 新增持股</button>
+    <button class="btn btn-secondary" onclick="setBroker()">切換券商</button>
+  </div>
+  <div class="subtotal">
+    <span id="stockSubtotalLabel">股票小計 (TWD)</span><b id="stockSubtotal">NT$ 0</b>
+  </div>
+  <div class="help-text">切換上方「台股/美股」可分別記錄；點「切換券商」可建立/切換券商（最多 3 個）。</div>
+</div>
+
+<!-- Other Income -->
+<div class="section">
+  <div class="section-title">
+    <span>🎁 其他收入 / 額外進帳</span>
+    <button class="btn" onclick="addOther()">＋ 新增</button>
+  </div>
+  <table class="row-table" id="otherTable">
+    <thead><tr>
+      <th style="width:50px;">#</th>
+      <th>類別</th>
+      <th>項目說明</th>
+      <th style="width:130px;">金額 (TWD)</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="subtotal"><span>其他收入小計 (TWD)</span><b id="otherSubtotal">NT$ 0</b></div>
+</div>
+
+<!-- Lending -->
+<div class="section">
+  <div class="section-title"><span>💸 借款明細</span></div>
+  <div class="subsection-title">↗ 借出（我借給別人）<span class="tag yellow">別人欠我</span></div>
+  <table class="row-table" id="lendOutTable">
+    <thead><tr>
+      <th style="width:50px;">#</th>
+      <th>對象</th>
+      <th style="width:130px;">金額</th>
+      <th>備註</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <button class="btn btn-secondary" onclick="addLendOut()" style="margin-top:8px;">＋ 新增借出</button>
+  <div class="subtotal"><span>借出總額 (TWD)</span><b id="lendOutSubtotal">NT$ 0</b></div>
+
+  <div class="subsection-title" style="margin-top:18px;">↙ 借入（別人借給我）<span class="tag red">我欠別人</span></div>
+  <table class="row-table" id="borrowInTable">
+    <thead><tr>
+      <th style="width:50px;">#</th>
+      <th>對象</th>
+      <th style="width:130px;">金額</th>
+      <th>備註</th>
+      <th style="width:60px;"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <button class="btn btn-secondary" onclick="addBorrowIn()" style="margin-top:8px;">＋ 新增借入</button>
+  <div class="subtotal"><span>借入總額 (TWD)</span><b id="borrowInSubtotal">NT$ 0</b></div>
+</div>
+
+<!-- Settings: FX -->
+<div class="section">
+  <div class="section-title"><span>⚙️ 匯率設定</span></div>
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px;">
+    <label>USD → TWD<input type="number" id="fxUSD" class="inp num" step="0.001" value="31.5"></label>
+    <label>JPY → TWD<input type="number" id="fxJPY" class="inp num" step="0.0001" value="0.21"></label>
+    <label>CNY → TWD<input type="number" id="fxCNY" class="inp num" step="0.01" value="4.4"></label>
+    <label>HKD → TWD<input type="number" id="fxHKD" class="inp num" step="0.01" value="4.05"></label>
+    <label>EUR → TWD<input type="number" id="fxEUR" class="inp num" step="0.01" value="34.5"></label>
+    <label>GBP → TWD<input type="number" id="fxGBP" class="inp num" step="0.01" value="40"></label>
+    <label>AUD → TWD<input type="number" id="fxAUD" class="inp num" step="0.01" value="21"></label>
+  </div>
+  <div class="help-text">輸入匯率後即時生效，可對照台銀/兆豐牌告即時更新。</div>
+</div>
+
+<!-- Save Bar -->
+<div class="save-bar">
+  <span class="saved-tag" id="savedTag">✓ 自動儲存中</span>
+  <button id="resetBtn" onclick="resetDemo()">↺ 重設示範資料</button>
+  <button class="btn btn-secondary" onclick="exportJSON()">⬇ 匯出 JSON</button>
+  <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">⬆ 匯入</button>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+  <button class="btn" onclick="saveAll()">💾 立即儲存</button>
+</div>
+
+<script>
+/* ============ State ============ */
+const STORAGE_KEY = "financeDashboardDataV1";
+let state = {
+  months: {},
+  currentMonth: "",
+  fx: { USD:31.5, JPY:0.21, CNY:4.4, HKD:4.05, EUR:34.5, GBP:40, AUD:21 }
+};
+let currentExchange = "A";
+let currentMarket = "TW";
+let currentBrokerUS = "富邦證券";
+let currentBrokerTW = "永豐金證券";
+let donutChart, bankChart, incomeChart, trendChart;
+
+/* ============ Helpers ============ */
+function num(v) { v = parseFloat(v); return isNaN(v) ? 0 : v; }
+function fxRate(code) { return state.fx[code] || 1; }
+function toTWD(amount, currency) {
+  if (currency === "TWD") return amount;
+  return amount * (fxRate(currency) || 1);
+}
+function fmtTWD(n) { n = Math.round(n); return "NT$ " + n.toLocaleString("zh-TW"); }
+function ensureMonth() { return state.months[state.currentMonth]; }
+let saveTimer = null;
+function txn() { clearTimeout(saveTimer); saveTimer = setTimeout(()=>saveAll(), 1200); }
+
+/* ============ Demo Data ============ */
+function getDemoState() {
+  const fx = { USD:31.5, JPY:0.21, CNY:4.4, HKD:4.05, EUR:34.5, GBP:40, AUD:21 };
+  const months = {
+    "2025-04": {
+      banks: [
+        {name:"薪轉戶", bank:"國泰世華", currency:"TWD", balance:185000},
+        {name:"活存備用", bank:"中信銀行", currency:"TWD", balance:75000},
+        {name:"緊急預備金", bank:"郵局", currency:"TWD", balance:120000},
+        {name:"美元投資戶", bank:"台新銀行", currency:"USD", balance:4200},
+        {name:"旅遊基金", bank:"玉山銀行", currency:"USD", balance:1850},
+        {name:"日本旅費", bank:"兆豐銀行", currency:"JPY", balance:380000},
+        {name:"家人匯款戶", bank:"中國信託", currency:"CNY", balance:12000}
+      ],
+      cards: [
+        {issuer:"中國信託", name:"LINE Pay卡", type:"循環", monthly:8500, balance:32500},
+        {issuer:"國泰世華", name:"現金回饋卡", type:"循環", monthly:4200, balance:11800},
+        {issuer:"玉山銀行", name:"Unicard", type:"分期", monthly:6800, balance:84000},
+        {issuer:"台北富邦", name:"J卡", type:"循環", monthly:3800, balance:9500},
+        {issuer:"滙豐銀行", name:"現金回饋御璽卡", type:"信貸", monthly:5200, balance:145000}
+      ],
+      crypto: {
+        A: [
+          {exchange:"A", symbol:"BTC", qty:0.085, priceUSD:68500},
+          {exchange:"A", symbol:"ETH", qty:1.45, priceUSD:3450},
+          {exchange:"A", symbol:"SOL", qty:38, priceUSD:165}
+        ],
+        B: [
+          {exchange:"B", symbol:"BNB", qty:8.2, priceUSD:598},
+          {exchange:"B", symbol:"DOGE", qty:12500, priceUSD:0.165}
+        ]
+      },
+      stocks: {
+        TW: {
+          "永豐金證券": [
+            {symbol:"2330", name:"台積電", qty:2, price:945, avg:580},
+            {symbol:"0050", name:"元大台灣50", qty:3, price:225, avg:185}
+          ],
+          "富邦證券": [
+            {symbol:"00878", name:"國泰永續高股息", qty:5, price:24.5, avg:22.1}
+          ],
+          "統一證券": [
+            {symbol:"2317", name:"鴻海", qty:1, price:175, avg:120}
+          ]
+        },
+        US: {
+          "永豐金證券": [
+            {symbol:"AAPL", name:"Apple", qty:18, price:212, avg:165},
+            {symbol:"MSFT", name:"Microsoft", qty:8, price:425, avg:320}
+          ],
+          "富邦證券": [
+            {symbol:"NVDA", name:"NVIDIA", qty:6, price:905, avg:480},
+            {symbol:"TSLA", name:"Tesla", qty:12, price:195, avg:230}
+          ],
+          "統一證券": [
+            {symbol:"VOO", name:"Vanguard S&P 500", qty:15, price:510, avg:435}
+          ]
+        }
+      },
+      other: [
+        {category:"中獎發票", desc:"1-2月發票 200元", amount:1000},
+        {category:"中獎發票", desc:"3-4月發票 1000元", amount:2000},
+        {category:"小投資", desc:"P2P 債權利息", amount:1850},
+        {category:"退款", desc:"網購退貨", amount:680}
+      ],
+      lendOut: [
+        {counterparty:"阿明", amount:30000, note:"年初借出，約定年底還"},
+        {counterparty:"公司同事 Lily", amount:10000, note:"短期週轉"}
+      ],
+      borrowIn: [
+        {counterparty:"姊姊", amount:50000, note:"購車頭期款，無息"}
+      ]
+    }
+  };
+  return {
+    months,
+    currentMonth: "2025-04",
+    fx
+  };
+}
+
+/* ============ Storage ============ */
+function saveAll() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const tag = document.getElementById("savedTag");
+  tag.textContent = `✓ 已儲存 ${new Date().toLocaleTimeString()}`;
+  setTimeout(()=> tag.textContent = "✓ 自動儲存中", 2000);
+}
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try { state = JSON.parse(raw); } catch(e) {}
+  }
+  if (!state.currentMonth || !state.months[state.currentMonth]) {
+    state = getDemoState();
+    saveAll();
+  }
+  refreshMonthPicker();
+}
+function resetDemo() {
+  if (!confirm("重設為示範資料（會清掉目前所有編輯）？")) return;
+  state = getDemoState();
+  currentExchange = "A";
+  currentMarket = "TW";
+  currentBrokerUS = "永豐金證券";
+  currentBrokerTW = "永豐金證券";
+  activateTab('[data-market="TW"]');
+  activateTab('[data-exchange="A"]');
+  saveAll();
+  refreshMonthPicker();
+  renderAll();
+}
+function activateTab(selector) {
+  document.querySelectorAll(selector).forEach(el=>el && el.classList && el.classList.add("active"));
+}
+
+/* ============ Month switcher ============ */
+function refreshMonthPicker() {
+  const sel = document.getElementById("monthPicker");
+  sel.innerHTML = "";
+  Object.keys(state.months).sort().reverse().forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m; opt.textContent = m;
+    if (m === state.currentMonth) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  renderAll();
+}
+function addMonth() {
+  let input = prompt("輸入新月份 (YYYY-MM)，例如：2025-05", "");
+  if (!input) return;
+  if (!/^\d{4}-\d{2}$/.test(input)) { alert("格式錯誤"); return; }
+  if (!state.months[input]) {
+    const prev = Object.keys(state.months).sort().reverse().find(m => m < input);
+    if (prev && confirm(`從 ${prev} 複製資料到 ${input} 嗎？`)) {
+      state.months[input] = JSON.parse(JSON.stringify(state.months[prev]));
+    } else {
+      state.months[input] = {
+        banks: [{name:"", bank:"", currency:"TWD", balance:0},{name:"",bank:"",currency:"TWD",balance:0},{name:"",bank:"",currency:"TWD",balance:0},{name:"",bank:"",currency:"TWD",balance:0},{name:"",bank:"",currency:"TWD",balance:0},{name:"",bank:"",currency:"TWD",balance:0},{name:"",bank:"",currency:"TWD",balance:0}],
+        cards: [{issuer:"",name:"",type:"循環",monthly:0,balance:0},{issuer:"",name:"",type:"循環",monthly:0,balance:0},{issuer:"",name:"",type:"循環",monthly:0,balance:0},{issuer:"",name:"",type:"循環",monthly:0,balance:0},{issuer:"",name:"",type:"循環",monthly:0,balance:0}],
+        crypto: { A: [{exchange:"A",symbol:"",qty:0,priceUSD:0}], B: [] },
+        stocks: { TW:{"券商1":[{symbol:"",name:"",qty:0,price:0,avg:0}],"券商2":[],"券商3":[]}, US:{"券商1":[{symbol:"",name:"",qty:0,price:0,avg:0}],"券商2":[],"券商3":[]} },
+        other: [], lendOut: [], borrowIn: []
+      };
+    }
+  }
+  state.currentMonth = input;
+  saveAll();
+  refreshMonthPicker();
+}
+
+/* ============ Render: Banks ============ */
+function renderBanks() {
+  const m = ensureMonth(), tbody = document.querySelector("#bankTable tbody");
+  tbody.innerHTML = "";
+  m.banks.forEach((b,i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><input class="inp" value="${b.name||""}" oninput="updateBank(${i},'name',this.value)"></td>
+      <td><input class="inp" value="${b.bank||""}" oninput="updateBank(${i},'bank',this.value)"></td>
+      <td><select class="inp" onchange="updateBank(${i},'currency',this.value)">
+        ${['TWD','USD','JPY','CNY','HKD','EUR','GBP','AUD'].map(c=>`<option ${b.currency===c?'selected':''}>${c}</option>`).join('')}
+      </select></td>
+      <td><input class="inp num" type="number" step="0.01" value="${b.balance}" oninput="updateBank(${i},'balance',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeBank(${i})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  computeTotals();
+}
+function addBank() { ensureMonth().banks.push({name:"",bank:"",currency:"TWD",balance:0}); renderBanks(); txn(); }
+function updateBank(i,k,v) { const b=ensureMonth().banks[i]; if(k==='balance') b.balance=num(v); else b[k]=v; txn(); computeTotals(); renderCharts(); }
+function removeBank(i) { if(!confirm("刪除此帳戶？")) return; ensureMonth().banks.splice(i,1); renderBanks(); txn(); }
+
+/* ============ Render: Cards ============ */
+function renderCards() {
+  const m = ensureMonth(), tbody = document.querySelector("#cardTable tbody");
+  tbody.innerHTML = "";
+  m.cards.forEach((c,i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><input class="inp" value="${c.issuer||""}" oninput="updateCard(${i},'issuer',this.value)"></td>
+      <td><input class="inp" value="${c.name||""}" oninput="updateCard(${i},'name',this.value)"></td>
+      <td><select class="inp" onchange="updateCard(${i},'type',this.value)">
+        ${['循環','分期','信貸'].map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}
+      </select></td>
+      <td><input class="inp num" type="number" value="${c.monthly}" oninput="updateCard(${i},'monthly',this.value)"></td>
+      <td><input class="inp num" type="number" value="${c.balance}" oninput="updateCard(${i},'balance',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeCard(${i})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  computeTotals();
+}
+function addCard() { ensureMonth().cards.push({issuer:"",name:"",type:"循環",monthly:0,balance:0}); renderCards(); txn(); }
+function updateCard(i,k,v) { const c=ensureMonth().cards[i]; if(['monthly','balance'].includes(k)) c[k]=num(v); else c[k]=v; txn(); computeTotals(); renderCharts(); }
+function removeCard(i) { if(!confirm("刪除此卡片？")) return; ensureMonth().cards.splice(i,1); renderCards(); txn(); }
+
+/* ============ Render: Crypto ============ */
+function switchExchange(ex, el) {
+  currentExchange = ex;
+  document.querySelectorAll('[data-exchange]').forEach(t=>t.classList.remove("active"));
+  el.classList.add("active");
+  renderCrypto();
+}
+function renderCrypto() {
+  const m = ensureMonth();
+  m.crypto = m.crypto || { A: [], B: [] };
+  if (!m.crypto.A) m.crypto.A = [];
+  if (!m.crypto.B) m.crypto.B = [];
+  const list = m.crypto[currentExchange];
+  const fx = fxRate("USD");
+  const tbody = document.querySelector("#cryptoTable tbody");
+  tbody.innerHTML = "";
+  list.forEach((c,i) => {
+    const twd = num(c.qty) * num(c.priceUSD) * fx;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="tag green">交易所 ${currentExchange}</span></td>
+      <td><input class="inp" value="${c.symbol||""}" placeholder="BTC" oninput="updateCrypto(${i},'symbol',this.value)"></td>
+      <td><input class="inp num" type="number" step="0.0000001" value="${c.qty}" oninput="updateCrypto(${i},'qty',this.value)"></td>
+      <td><input class="inp num" type="number" step="0.0001" value="${c.priceUSD}" oninput="updateCrypto(${i},'priceUSD',this.value)"></td>
+      <td>${fmtTWD(twd)}</td>
+      <td><button class="btn-icon" onclick="removeCrypto(${i})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  computeTotals();
+}
+function addCrypto() { ensureMonth().crypto[currentExchange].push({exchange:currentExchange,symbol:"",qty:0,priceUSD:0}); renderCrypto(); txn(); }
+function updateCrypto(i,k,v) { const c=ensureMonth().crypto[currentExchange][i]; if(['qty','priceUSD'].includes(k)) c[k]=num(v); else c[k]=v; renderCrypto(); txn(); }
+function removeCrypto(i) { if(!confirm("刪除此幣種？")) return; ensureMonth().crypto[currentExchange].splice(i,1); renderCrypto(); txn(); }
+
+/* ============ Render: Stocks ============ */
+function switchMarket(market, el) {
+  currentMarket = market;
+  document.querySelectorAll('[data-market]').forEach(t=>t.classList.remove("active"));
+  el.classList.add("active");
+  renderStocks();
+}
+function setBroker() {
+  let broker = prompt(`目前券商：${currentMarket==="TW"?currentBrokerTW:currentBrokerUS}\n輸入新券商暱稱：`, "");
+  if (!broker) return;
+  const m = ensureMonth();
+  if (!m.stocks[currentMarket][broker]) m.stocks[currentMarket][broker] = [];
+  if (currentMarket==="TW") currentBrokerTW = broker; else currentBrokerUS = broker;
+  renderStocks(); txn();
+}
+function renderStocks() {
+  const m = ensureMonth();
+  const broker = currentMarket==="TW" ? currentBrokerTW : currentBrokerUS;
+  if (!m.stocks) m.stocks = { TW:{"券商1":[]}, US:{"券商1":[]} };
+  if (!m.stocks[currentMarket]) m.stocks[currentMarket] = {};
+  if (!m.stocks[currentMarket][broker]) m.stocks[currentMarket][broker] = [];
+  document.getElementById("stockBroker").value = broker;
+  const list = m.stocks[currentMarket][broker];
+  const isUS = currentMarket === "US";
+  const fx = fxRate("USD");
+  const tbody = document.querySelector("#stockTable tbody");
+  tbody.innerHTML = "";
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:20px;">此券商 ${currentMarket} 尚無持股，點下方「＋新增持股」開始建立</td></tr>`;
+  }
+  list.forEach((s,i) => {
+    let marketVal, profit;
+    if (isUS) {
+      marketVal = num(s.qty) * num(s.price) * fx;
+      profit = num(s.qty) * (num(s.price) - num(s.avg)) * fx;
+    } else {
+      marketVal = num(s.qty) * 1000 * num(s.price);
+      profit = num(s.qty) * 1000 * (num(s.price) - num(s.avg));
+    }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input class="inp" value="${s.symbol||""}" placeholder="${isUS?'AAPL':'2330'}" oninput="updateStock(${i},'symbol',this.value)"></td>
+      <td><input class="inp" value="${s.name||""}" oninput="updateStock(${i},'name',this.value)"></td>
+      <td><input class="inp num" type="number" step="0.0001" value="${s.qty}" oninput="updateStock(${i},'qty',this.value)"></td>
+      <td><input class="inp num" type="number" step="0.01" value="${s.price}" oninput="updateStock(${i},'price',this.value)"></td>
+      <td><input class="inp num" type="number" step="0.01" value="${s.avg}" oninput="updateStock(${i},'avg',this.value)"></td>
+      <td>${fmtTWD(marketVal)}</td>
+      <td class="${profit>=0?'profit-pos':'profit-neg'}">${profit>=0?'+':''}${fmtTWD(profit)}</td>
+      <td><button class="btn-icon" onclick="removeStock(${i})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  computeTotals();
+}
+function addStock() {
+  const broker = currentMarket==="TW" ? currentBrokerTW : currentBrokerUS;
+  ensureMonth().stocks[currentMarket][broker] = ensureMonth().stocks[currentMarket][broker] || [];
+  ensureMonth().stocks[currentMarket][broker].push({symbol:"",name:"",qty:0,price:0,avg:0});
+  renderStocks(); txn();
+}
+function updateStock(i,k,v) {
+  const broker = currentMarket==="TW" ? currentBrokerTW : currentBrokerUS;
+  const s=ensureMonth().stocks[currentMarket][broker][i];
+  if(['qty','price','avg'].includes(k)) s[k]=num(v); else s[k]=v;
+  renderStocks(); txn();
+}
+function removeStock(i) {
+  if(!confirm("刪除此持股？")) return;
+  const broker = currentMarket==="TW" ? currentBrokerTW : currentBrokerUS;
+  ensureMonth().stocks[currentMarket][broker].splice(i,1);
+  renderStocks(); txn();
+}
+
+/* ============ Render: Other ============ */
+function renderOther() {
+  const m = ensureMonth(), tbody = document.querySelector("#otherTable tbody");
+  tbody.innerHTML = "";
+  if (m.other.length === 0) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:20px;">尚無其他收入紀錄</td></tr>`;
+  m.other.forEach((o,i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><select class="inp" onchange="updateOther(${i},'category',this.value)">
+        ${['中獎發票','小投資','退款','贈與','其他'].map(c=>`<option ${o.category===c?'selected':''}>${c}</option>`).join('')}
+      </select></td>
+      <td><input class="inp" value="${o.desc||""}" oninput="updateOther(${i},'desc',this.value)"></td>
+      <td><input class="inp num" type="number" value="${o.amount}" oninput="updateOther(${i},'amount',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeOther(${i})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  computeTotals();
+}
+function addOther() { ensureMonth().other.push({category:"中獎發票",desc:"",amount:0}); renderOther(); txn(); }
+function updateOther(i,k,v) { const o=ensureMonth().other[i]; if(k==='amount') o[k]=num(v); else o[k]=v; computeTotals(); txn(); }
+function removeOther(i) { if(!confirm("刪除此項目？")) return; ensureMonth().other.splice(i,1); renderOther(); txn(); }
+
+/* ============ Render: Lending ============ */
+function renderLend() {
+  const m = ensureMonth();
+  const t1 = document.querySelector("#lendOutTable tbody");
+  t1.innerHTML = "";
+  if (m.lendOut.length === 0) t1.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:14px;">無借出紀錄</td></tr>`;
+  m.lendOut.forEach((r,i)=>{
+    t1.innerHTML += `<tr>
+      <td>${i+1}</td>
+      <td><input class="inp" value="${r.counterparty||""}" oninput="updateLendOut(${i},'counterparty',this.value)"></td>
+      <td><input class="inp num" type="number" value="${r.amount}" oninput="updateLendOut(${i},'amount',this.value)"></td>
+      <td><input class="inp" value="${r.note||""}" oninput="updateLendOut(${i},'note',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeLendOut(${i})">×</button></td>
+    </tr>`;
+  });
+  const t2 = document.querySelector("#borrowInTable tbody");
+  t2.innerHTML = "";
+  if (m.borrowIn.length === 0) t2.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:14px;">無借入紀錄</td></tr>`;
+  m.borrowIn.forEach((r,i)=>{
+    t2.innerHTML += `<tr>
+      <td>${i+1}</td>
+      <td><input class="inp" value="${r.counterparty||""}" oninput="updateBorrowIn(${i},'counterparty',this.value)"></td>
+      <td><input class="inp num" type="number" value="${r.amount}" oninput="updateBorrowIn(${i},'amount',this.value)"></td>
+      <td><input class="inp" value="${r.note||""}" oninput="updateBorrowIn(${i},'note',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeBorrowIn(${i})">×</button></td>
+    </tr>`;
+  });
+  computeTotals();
+}
+function addLendOut() { ensureMonth().lendOut.push({counterparty:"",amount:0,note:""}); renderLend(); txn(); }
+function updateLendOut(i,k,v) { const r=ensureMonth().lendOut[i]; if(k==='amount') r[k]=num(v); else r[k]=v; computeTotals(); txn(); }
+function removeLendOut(i) { if(!confirm("刪除？")) return; ensureMonth().lendOut.splice(i,1); renderLend(); txn(); }
+function addBorrowIn() { ensureMonth().borrowIn.push({counterparty:"",amount:0,note:""}); renderLend(); txn(); }
+function updateBorrowIn(i,k,v) { const r=ensureMonth().borrowIn[i]; if(k==='amount') r[k]=num(v); else r[k]=v; computeTotals(); txn(); }
+function removeBorrowIn(i) { if(!confirm("刪除？")) return; ensureMonth().borrowIn.splice(i,1); renderLend(); txn(); }
+
+/* ============ Totals / KPIs ============ */
+function computeTotals() {
+  const m = ensureMonth();
+  const bankTWD = m.banks.reduce((s,b)=> s + toTWD(num(b.balance), b.currency||"TWD"), 0);
+  document.getElementById("bankSubtotal").textContent = fmtTWD(bankTWD);
+
+  const cardMonthly = (m.cards||[]).reduce((s,c)=> s + num(c.monthly), 0);
+  const cardBalance = (m.cards||[]).reduce((s,c)=> s + num(c.balance), 0);
+  document.getElementById("cardSubtotal").textContent = fmtTWD(cardMonthly + cardBalance);
+
+  const fx = fxRate("USD");
+  const cryptoTWD = (m.crypto.A||[]).concat(m.crypto.B||[]).reduce((s,c)=> s + num(c.qty) * num(c.priceUSD) * fx, 0);
+  document.getElementById("cryptoSubtotal").textContent = fmtTWD(cryptoTWD);
+
+  let stockTWD = 0;
+  Object.values(m.stocks.TW).forEach(arr => arr.forEach(s => stockTWD += num(s.qty)*1000*num(s.price)));
+  Object.values(m.stocks.US).forEach(arr => arr.forEach(s => stockTWD += num(s.qty)*num(s.price)*fx));
+  document.getElementById("stockSubtotal").textContent = fmtTWD(stockTWD);
+
+  const otherTWD = m.other.reduce((s,o)=> s + num(o.amount), 0);
+  document.getElementById("otherSubtotal").textContent = fmtTWD(otherTWD);
+
+  const lendOut = m.lendOut.reduce((s,r)=> s + num(r.amount), 0);
+  const borrowIn = m.borrowIn.reduce((s,r)=> s + num(r.amount), 0);
+  document.getElementById("lendOutSubtotal").textContent = fmtTWD(lendOut);
+  document.getElementById("borrowInSubtotal").textContent = fmtTWD(borrowIn);
+
+  const totalAssets = bankTWD + cryptoTWD + stockTWD + otherTWD;
+  const totalLiab = cardMonthly + borrowIn;
+  const net = totalAssets - totalLiab;
+
+  document.getElementById("kpiAssets").textContent = fmtTWD(totalAssets);
+  document.getElementById("kpiAssetsSub").textContent = `銀行 ${fmtTWD(bankTWD)} · 股票 ${fmtTWD(stockTWD)} · 加密 ${fmtTWD(cryptoTWD)} · 其他 ${fmtTWD(otherTWD)}`;
+  document.getElementById("kpiLiab").textContent = fmtTWD(totalLiab);
+  document.getElementById("kpiLiabSub").textContent = `信用卡月付 ${fmtTWD(cardMonthly)} · 借入 ${fmtTWD(borrowIn)}`;
+  document.getElementById("kpiNet").textContent = fmtTWD(net);
+  document.getElementById("kpiNet").style.color = net>=0 ? "var(--green)" : "var(--red)";
+  const ns = document.getElementById("kpiNetSub");
+  ns.className = "kpi-sub " + (net>=0?"pos":"neg");
+  ns.textContent = net>=0 ? "正向成長" : "資產 < 負債";
+  document.getElementById("kpiLend").textContent = fmtTWD(lendOut);
+
+  return {totalAssets, totalLiab, net, bankTWD, stockTWD, cryptoTWD, otherTWD, cardMonthly, borrowIn, lendOut};
+}
+
+/* ============ Charts ============ */
+function renderCharts() {
+  const t = computeTotals();
+  const months = Object.keys(state.months).sort();
+
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById("donutChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["銀行","股票","加密","其他"],
+      datasets: [{
+        data: [t.bankTWD, t.stockTWD, t.cryptoTWD, t.otherTWD],
+        backgroundColor: ["#00e676","#40c4ff","#b388ff","#ffc400"],
+        borderColor: "#0b0f14", borderWidth: 2
+      }]
+    },
+    options: {
+      cutout: "65%",
+      plugins: { legend: { labels: { color: "#e6edf3", font:{size:11} } } },
+      animation:{animateRotate:true, duration:1200}
+    }
+  });
+
+  const m = ensureMonth();
+  const labels = m.banks.map(b => b.name || b.bank || "—");
+  const data = m.banks.map(b => toTWD(num(b.balance), b.currency||"TWD"));
+  if (bankChart) bankChart.destroy();
+  bankChart = new Chart(document.getElementById("bankChart"), {
+    type: "bar",
+    data: {
+      labels, datasets: [{
+        label: "餘額 (TWD)", data,
+        backgroundColor: "rgba(0,230,118,0.65)", borderColor: "#00e676", borderWidth: 1, borderRadius: 6
+      }]
+    },
+    options: {
+      plugins:{ legend:{display:false} },
+      scales: {
+        x: { ticks: { color: "#8a98ac", font:{size:10} }, grid:{display:false} },
+        y: { ticks: { color: "#8a98ac", callback: v => "NT$ "+(v/1000).toFixed(0)+"k" }, grid:{color:"#1f2a3a"} }
+      }
+    }
+  });
+
+  const incomeTotal = m.other.reduce((s,o)=>s+num(o.amount),0);
+  const expenseTotal = m.cards.reduce((s,c)=>s+num(c.monthly)+num(c.balance),0) + m.borrowIn.reduce((s,r)=>s+num(r.amount),0);
+  if (incomeChart) incomeChart.destroy();
+  incomeChart = new Chart(document.getElementById("incomeChart"), {
+    type: "bar",
+    data: {
+      labels: ["本月收入","本月支出"],
+      datasets: [{
+        data: [Math.max(0,incomeTotal), Math.max(0,expenseTotal)],
+        backgroundColor: ["#00e676","#ff5252"], borderRadius: 6
+      }]
+    },
+    options: {
+      plugins:{legend:{display:false}},
+      scales: { x:{ticks:{color:"#8a98ac"},grid:{display:false}}, y:{ticks:{color:"#8a98ac",callback:v=>"NT$ "+(v/1000).toFixed(0)+"k"},grid:{color:"#1f2a3a"} } }
+    }
+  });
+
+  const tlabels = months;
+  const netSeries = months.map(ym => {
+    const mm = state.months[ym];
+    const bank = mm.banks.reduce((s,b)=>s+toTWD(num(b.balance),b.currency||"TWD"),0);
+    const fx2 = state.fx.USD || 31.5;
+    const crypto = (mm.crypto.A||[]).concat(mm.crypto.B||[]).reduce((s,c)=>s+num(c.qty)*num(c.priceUSD)*fx2,0);
+    let stock = 0;
+    Object.values(mm.stocks.TW).forEach(arr=>arr.forEach(s=>stock+=num(s.qty)*1000*num(s.price)));
+    Object.values(mm.stocks.US).forEach(arr=>arr.forEach(s=>stock+=num(s.qty)*num(s.price)*fx2));
+    const other = mm.other.reduce((s,o)=>s+num(o.amount),0);
+    const liab = (mm.cards||[]).reduce((s,c)=>s+num(c.monthly),0) + mm.borrowIn.reduce((s,r)=>s+num(r.amount),0);
+    return bank+crypto+stock+other - liab;
+  });
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById("trendChart"), {
+    type: "line",
+    data: { labels: tlabels, datasets: [{
+      label: "淨值 (TWD)", data: netSeries, fill: true,
+      borderColor: "#40c4ff", backgroundColor: "rgba(64,196,255,0.15)",
+      tension: 0.35, pointRadius: 4, pointBackgroundColor:"#40c4ff"
+    }]},
+    options: {
+      plugins:{legend:{labels:{color:"#e6edf3"}}},
+      scales:{ x:{ticks:{color:"#8a98ac"},grid:{display:false}}, y:{ticks:{color:"#8a98ac",callback:v=>"NT$ "+(v/1000).toFixed(0)+"k"},grid:{color:"#1f2a3a"}} }
+    }
+  });
+}
+
+/* ============ FX bindings ============ */
+["USD","JPY","CNY","HKD","EUR","GBP","AUD"].forEach(c=>{
+  document.getElementById("fx"+c).addEventListener("input", e => {
+    state.fx[c] = num(e.target.value) || (c==="USD"?31.5:1);
+    document.getElementById("fx"+c).value = state.fx[c];
+    txn(); renderAll();
+  });
+});
+
+/* ============ Import / Export ============ */
+function exportJSON() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data],{type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `finance-${state.currentMonth}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
+function importJSON(ev) {
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const obj = JSON.parse(e.target.result);
+      if (confirm("匯入會覆蓋現有資料，確定嗎？")) {
+        state = obj; state.currentMonth = Object.keys(state.months)[0] || state.currentMonth;
+        saveAll(); refreshMonthPicker();
+      }
+    } catch(err) { alert("匯入失敗：" + err.message); }
+  };
+  r.readAsText(f); ev.target.value = "";
+}
+
+/* ============ Render All ============ */
+function renderAll() {
+  document.querySelectorAll('[data-exchange]').forEach(el=>{ el.classList.toggle('active', el.dataset.exchange===currentExchange); });
+  document.querySelectorAll('[data-market]').forEach(el=>{ el.classList.toggle('active', el.dataset.market===currentMarket); });
+  computeTotals();
+  renderBanks(); renderCards(); renderCrypto(); renderStocks();
+  renderOther(); renderLend(); renderCharts();
+}
+
+/* ============ Init ============ */
+loadState();
+currentBrokerUS = (()=>{ const m=ensureMonth(); const key=m.stocks.US && Object.keys(m.stocks.US)[0]; return key||"券商1"; })();
+currentBrokerTW = (()=>{ const m=ensureMonth(); const key=m.stocks.TW && Object.keys(m.stocks.TW)[0]; return key||"券商1"; })();
+currentMarket = "US";
+document.getElementById("monthPicker").addEventListener("change", e => { state.currentMonth = e.target.value; saveAll(); renderAll(); });
+renderAll();
+</script>
+</body>
+</html>
+-
